@@ -6,24 +6,25 @@ import plotly.graph_objs as go
 
 data = []
 
-startingBalance = 25000.00
+balance = 25000.00
+shares = []
+
 
 with open('tickers.txt') as tickerDoc:
 	tickers = tickerDoc.read()
 	tickerList = tickers.split()
-for i in range(len(tickerList)):
-	data.append(yf.download(tickers= tickerList[i], period = '1d', interval = '5m')) 
 
 #declare figure
 fig = go.Figure()
 
-#Candlestick
-for i in range(len(data)):
+#Gathers data from tickers and displays
+for i in range(len(tickerList)):
+	data.append(yf.download(tickers= tickerList[i], period = '1d', interval = '5m'))
 	fig.add_trace(go.Candlestick(x=data[i].index,
 	                open=data[i]['Open'],
 	                high=data[i]['High'],
 	                low=data[i]['Low'],
-	                close=data[i]['Close'], name = tickerList[i]))
+	                close=data[i]['Close'], name = tickerList[i], visible = 'legendonly'))
 
 # Add titles
 fig.update_layout(
@@ -43,6 +44,13 @@ fig.update_xaxes(
         ])
     )
 )
+
+def invest(ticker, numberOfDollars):
+	if numberOfDollars > balance:
+		startingBalance = startingBalance - numberOfDollars
+
+index = tickerList.index('AAPL')
+print(data[index]['Open'])
 
 #Show
 fig.show()
