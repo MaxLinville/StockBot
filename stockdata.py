@@ -1,56 +1,101 @@
-import numpy as numpy
-import pandas as pd
+import datetime
 
-import yfinance as yf
-import plotly.graph_objs as go
+import dash
+from dash import dcc
+from dash import html
+import plotly
+from dash.dependencies import Input, Output
+
+# pip install pyorbital
+from pyorbital.orbital import Orbital
+satellite = Orbital('TERRA')
+
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 data = []
 
-balance = 25000.00
-shares = []
-
-
 with open('tickers.txt') as tickerDoc:
-	tickers = tickerDoc.read()
-	tickerList = tickers.split()
+    tickers = tickerDoc.read()
+    tickerList = tickers.split()
 
-#declare figure
-fig = go.Figure()
-
-#Gathers data from tickers and displays
 for i in range(len(tickerList)):
-	data.append(yf.download(tickers= tickerList[i], period = '1d', interval = '5m'))
-	fig.add_trace(go.Candlestick(x=data[i].index,
-	                open=data[i]['Open'],
-	                high=data[i]['High'],
-	                low=data[i]['Low'],
-	                close=data[i]['Close'], name = tickerList[i], visible = 'legendonly'))
+    data.append(yf.download(tickers= tickerList[i], period = '1d', interval = '5m'))
 
-# Add titles
-fig.update_layout(
-    title='Live share price evolution',
-    yaxis_title='Stock Price (USD per Shares)')
-
-# X-Axes
-fig.update_xaxes(
-    rangeslider_visible=True,
-    rangeselector=dict(
-        buttons=list([
-            dict(count=15, label="15m", step="minute", stepmode="backward"),
-            dict(count=45, label="45m", step="minute", stepmode="backward"),
-            dict(count=1, label="HTD", step="hour", stepmode="todate"),
-            dict(count=3, label="3h", step="hour", stepmode="backward"),
-            dict(step="all")
-        ])
-    )
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+app.layout = html.Div(
+    html.Div([
+        html.H4('TERRA Satellite Live Feed'),
+        html.Div(id='live-update-text'),
+        dcc.Graph(id='live-update-graph'),
+        dcc.Interval(
+            id='interval-component',
+            interval=1*1000, # in milliseconds
+            n_intervals=0
+        )
+    ])
 )
 
-def invest(ticker, numberOfDollars):
-	if numberOfDollars > balance:
-		startingBalance = startingBalance - numberOfDollars
 
-index = tickerList.index('AAPL')
-print(data[index]['Open'])
+@app.callback(Output('live-update-text', 'children'),
+              Input('interval-component', 'n_intervals'))
+def update_metrics(n):
+    data = []
+    for i in range(len(tickerList)):
+        data.append(yf.download(tickers= tickerList[i], period = '1d', interval = '5m'))
+    style = {'padding': '5px', 'fontSize': '16px'}
+    return [
+        html.Span('Longitude: {0:.2f}'.format(data[0]), style=style),
+    ]
 
-#Show
-fig.show()
+
+# Multiple components can update everytime interval gets fired.
+@app.callback(Output('live-update-graph', 'figure'),
+              Input('interval-component', 'n_intervals'))
+def update_graph_live(n):
+    satellite = Orbital('TERRA')
+    data = {
+        'time': [],
+        'Latitude': [],
+        'Longitude': [],
+        'Altitude': []
+    }
+
+    # Collect some data
+    for i in range(180):
+        time = datetime.datetime.now() - datetime.timedelta(seconds=i*20)
+        lon, lat, alt = satellite.get_lonlatalt(
+            time
+        )
+        data['Longitude'].append(lon)
+        data['Latitude'].append(lat)
+        data['Altitude'].append(alt)
+        data['time'].append(time)
+
+    # Create the graph with subplots
+    fig = plotly.tools.make_subplots(rows=2, cols=1, vertical_spacing=0.2)
+    fig['layout']['margin'] = {
+        'l': 30, 'r': 10, 'b': 30, 't': 10
+    }
+    fig['layout']['legend'] = {'x': 0, 'y': 1, 'xanchor': 'left'}
+
+    fig.append_trace({
+        'x': data['time'],
+        'y': data['Altitude'],
+        'name': 'Altitude',
+        'mode': 'lines+markers',
+        'type': 'scatter'
+    }, 1, 1)
+    fig.append_trace({
+        'x': data['Longitude'],
+        'y': data['Latitude'],
+        'text': data['time'],
+        'name': 'Longitude vs Latitude',
+        'mode': 'lines+markers',
+        'type': 'scatter'
+    }, 2, 1)
+
+    return fig
+
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
